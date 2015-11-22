@@ -10,6 +10,7 @@
 //~ #include "TVector2.h"
 //~ #include "TVector3.h"
 //~ #include "TLorentzVector.h"
+#include "TString.h"
 
 #include "Math/Minimizer.h"
 #include "Math/Factory.h"
@@ -33,7 +34,7 @@
  * https://root.cern.ch/numerical-minimization
  */
 
-const int Ndim = 2;
+const int Ndim = 100;
 
 using namespace ROOT::Math;
 using namespace std;
@@ -43,6 +44,15 @@ double func1(const double* xx)
     double x = xx[0];
     double y = xx[1];
     return (x-3)*(x-3)+(y-2)*(y-2);
+}
+
+double funcN(const double* xx)
+{
+    double accumulator=0;
+    for (int i=0; i< Ndim; ++i) {
+        accumulator += (xx[i]-1)*(xx[i]-1);
+    }
+    return accumulator;
 }
 
 int minimizer()
@@ -91,14 +101,15 @@ int minimizer()
         
         // The minimizer needs an IMultiGenFunction, which is easily provided
         // by a Functor, which is a generic wrapper class
-        Functor fun = Functor(&func1, Ndim);
+        Functor fun = Functor(&funcN, Ndim);
         
         // Give the function to the minimizer
         min->SetFunction(fun);
         
         // Give the function variables
-        min->SetVariable(0, "x", 0, 0.1);
-        min->SetVariable(1, "y", 0, 0.1);
+        for (int i=0; i<Ndim; ++i) {
+            min->SetVariable(i, Form("x%d", i), 0, 0.1);
+        }
         
         // Verbosity
         min->SetPrintLevel(1);
