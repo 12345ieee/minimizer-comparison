@@ -18,18 +18,19 @@
 /* Algorithms list
  * minName              algoName
  * ---------------------------------
- * Minuit/Minuit2       Migrad, Simplex, Scan, Seek, Combined  (default is Migrad)
- * Minuit2              Fumili
- * Fumili
+ * Minuit/Minuit2       Migrad, Simplex, Seek, Combined (default is Migrad)
+ * Minuit/Minuit2       Scan (good for scans, not minimizations)
+ * Minuit2              Fumili (*** needs different function type ***), Fumili2
+ * Fumili               *** needs different function type ***
  * GSLMultiMin          ConjugateFR, ConjugatePR, BFGS, BFGS2, SteepestDescent
- * GSLMultiFit
+ * GSLMultiFit          *** needs different function type ***
  * GSLSimAn
- * Linear
+ * Linear               *** needs linear function ***
  * Genetic
  * 
- * (Fumili needs gradient)
  * 
  * https://root.cern.ch/fitting
+ * https://root.cern.ch/numerical-minimization
  */
 
 const int Ndim = 2;
@@ -46,70 +47,86 @@ double func1(const double* xx)
 
 int minimizer()
 {
-    // Instantiate minimizer with a name/algorithm combo (case sensitive!)
-    Minimizer* min = Factory::CreateMinimizer("Minuit", "Migrad");
-    //Minimizer* min = Factory::CreateMinimizer("Minuit", "Simplex");
-    //Minimizer* min = Factory::CreateMinimizer("Minuit", "Combined");
-    //Minimizer* min = Factory::CreateMinimizer("Minuit", "Scan");
-    //Minimizer* min = Factory::CreateMinimizer("Minuit", "Seek");
+    // List of valid minimizers
+    vector<pair<string,string>> minVector;
+    //                                      name      algorithm
+    minVector.push_back(pair<string,string>("Minuit", "Migrad"));
+    minVector.push_back(pair<string,string>("Minuit", "Simplex"));
+    minVector.push_back(pair<string,string>("Minuit", "Combined"));
+    minVector.push_back(pair<string,string>("Minuit", "Seek"));
+    // minVector.push_back(pair<string,string>("Minuit", "Scan"));
     
-    //Minimizer* min = Factory::CreateMinimizer("Minuit2", "Migrad");
-    //Minimizer* min = Factory::CreateMinimizer("Minuit2", "Simplex");
-    //Minimizer* min = Factory::CreateMinimizer("Minuit2", "Combined");
-    //Minimizer* min = Factory::CreateMinimizer("Minuit2", "Scan");
-    //Minimizer* min = Factory::CreateMinimizer("Minuit", "Seek");
-    //Minimizer* min = Factory::CreateMinimizer("Minuit2", "Fumili");
+    minVector.push_back(pair<string,string>("Minuit2", "Migrad"));
+    minVector.push_back(pair<string,string>("Minuit2", "Simplex"));
+    minVector.push_back(pair<string,string>("Minuit2", "Combined"));
+    minVector.push_back(pair<string,string>("Minuit2", "Seek"));
+    // minVector.push_back(pair<string,string>("Minuit2", "Scan"));
+    // minVector.push_back(pair<string,string>("Minuit2", "Fumili"));
+    minVector.push_back(pair<string,string>("Minuit2", "Fumili2"));
     
-    //Minimizer* min = Factory::CreateMinimizer("GSLMultiMin", "ConjugateFR");
-    //Minimizer* min = Factory::CreateMinimizer("GSLMultiMin", "ConjugatePR");
-    //Minimizer* min = Factory::CreateMinimizer("GSLMultiMin", "BFGS");
-    //Minimizer* min = Factory::CreateMinimizer("GSLMultiMin", "BFGS2");
-    //Minimizer* min = Factory::CreateMinimizer("GSLMultiMin", "SteepestDescent");
+    // minVector.push_back(pair<string,string>("Fumili",  "Fumili"));
     
-    //Minimizer* min = Factory::CreateMinimizer("GSLMultiFit", "");
+    minVector.push_back(pair<string,string>("GSLMultiMin", "ConjugateFR"));
+    minVector.push_back(pair<string,string>("GSLMultiMin", "ConjugatePR"));
+    minVector.push_back(pair<string,string>("GSLMultiMin", "BFGS"));
+    minVector.push_back(pair<string,string>("GSLMultiMin", "BFGS2"));
+    minVector.push_back(pair<string,string>("GSLMultiMin", "SteepestDescent"));
     
-    //Minimizer* min = Factory::CreateMinimizer("GSLSimAn", "");
+    // minVector.push_back(pair<string,string>("GSLMultiFit", ""));
+    
+    minVector.push_back(pair<string,string>("GSLSimAn", ""));
 
-    if (min==nullptr) {
-        cout << "Invalid algorithm name" << endl;
-        return 1;
-    }
+    // minVector.push_back(pair<string,string>("Linear", "");
     
-    // The minimizer needs an IMultiGenFunction, which is easily provided
-    // by a Functor, which is a generic wrapper class
-    Functor fun = Functor(&func1, Ndim);
+    minVector.push_back(pair<string,string>("Genetic", ""));
+
+    for (unsigned int i=0; i < minVector.size(); ++i) {
     
-    // Give the function to the minimizer
-    min->SetFunction(fun);
-    
-    // Give the function variables
-    min->SetVariable(0, "x", 0, 0.01);
-    min->SetVariable(1, "y", 0, 0.01);
-    
-    // Verbosity
-    min->SetPrintLevel(5);
-    
-    // Algorithm strategy (higher=slower & more accurate)
-    // min->SetStrategy(1);
-    
-    // Algorithms parameters
-    min->SetTolerance(0.001); // For simplex
-    
-    // Minimize!
-    min->Minimize();
-    
-    // Get out the values
-    const double  minValue = min->MinValue();
-    const double* minPoint = min->X();
-    const double* minErrors= min->Errors();
-    
-    cout << "\nValue: " << minValue << endl;
-    for (int i=0; i<Ndim; ++i) {
-        cout << "x" << i+1 << ": " << minPoint[i];
-        if (minErrors!=nullptr) cout << " ± " << minErrors[i];
+        Minimizer* min = Factory::CreateMinimizer(minVector[i].first, minVector[i].second);
+        if (min==nullptr) {
+            cout << "Invalid algorithm: " << minVector[i].first << " - " << minVector[i].second << endl;
+            continue;
+        }
+        else cout << "Using algorithm: " << minVector[i].first << " - " << minVector[i].second << endl;
+        
+        // The minimizer needs an IMultiGenFunction, which is easily provided
+        // by a Functor, which is a generic wrapper class
+        Functor fun = Functor(&func1, Ndim);
+        
+        // Give the function to the minimizer
+        min->SetFunction(fun);
+        
+        // Give the function variables
+        min->SetVariable(0, "x", 0, 0.1);
+        min->SetVariable(1, "y", 0, 0.1);
+        
+        // Verbosity
+        min->SetPrintLevel(1);
+        
+        // Algorithm strategy (higher=slower & more accurate)
+        // min->SetStrategy(1);
+        
+        // Algorithms parameters
+        min->SetMaxFunctionCalls(100000);
+        min->SetMaxIterations(10000);
+        min->SetTolerance(0.001);
+        
+        // Minimize!
+        min->Minimize();
+        
+        // Get out the values
+        const double  minValue = min->MinValue();
+        const double* minPoint = min->X();
+        const double* minErrors= min->Errors();
+        
+        cout << "\nValue: " << minValue << endl;
+        for (int i=0; i<Ndim; ++i) {
+            cout << "x" << i+1 << ": " << minPoint[i];
+            if (minErrors!=nullptr) cout << " ± " << minErrors[i];
+            cout << endl;
+        }
         cout << endl;
     }
-    cout << endl;
     
     return 0;
 }
