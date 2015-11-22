@@ -1,0 +1,15 @@
+# Precompiled
+*.o
+*.d
+*.so
+*.pcm
+
+# Output PDFs
+*.pdf
+
+# Rootfiles
+*.root
+
+# This project
+tutorial.C
+minimizer
