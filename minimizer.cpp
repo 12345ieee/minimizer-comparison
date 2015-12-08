@@ -1,8 +1,9 @@
 #include <iostream>
 //~ #include <fstream>
 //~ #include <cmath>
+#include <ctime>
 
-//~ #include "TH1.h"
+#include "TH1.h"
 //~ #include "TH2.h"
 //~ #include "TH3.h"
 //~ #include "TCanvas.h"
@@ -39,18 +40,28 @@ const int Ndim = 100;
 using namespace ROOT::Math;
 using namespace std;
 
-double func1(const double* xx)
+double parabola1(const double* xx)
 {
     double x = xx[0];
     double y = xx[1];
     return (x-3)*(x-3)+(y-2)*(y-2);
 }
 
-double funcN(const double* xx)
+double parabolaN(const double* xx)
 {
     double accumulator=0;
     for (int i=0; i< Ndim; ++i) {
-        accumulator += (xx[i]-1)*(xx[i]-1);
+        double c = i+1;
+        accumulator += (xx[i]-1/c)*(xx[i]-1/c);
+    }
+    return accumulator;
+}
+
+double rosenbrockN(const double* xx)
+{
+    double accumulator=0;
+    for (int i=0; i< Ndim-1; ++i) {
+        accumulator += 100*pow(xx[i+1]-xx[i]*xx[i], 2) + pow(xx[i]-1, 2);
     }
     return accumulator;
 }
@@ -60,15 +71,15 @@ int minimizer()
     // List of valid minimizers
     vector<pair<string,string>> minVector;
     //                                      name      algorithm
-    minVector.push_back(pair<string,string>("Minuit", "Migrad"));
-    minVector.push_back(pair<string,string>("Minuit", "Simplex"));
-    minVector.push_back(pair<string,string>("Minuit", "Combined"));
-    minVector.push_back(pair<string,string>("Minuit", "Seek"));
+    // minVector.push_back(pair<string,string>("Minuit", "Migrad"));
+    // minVector.push_back(pair<string,string>("Minuit", "Simplex"));
+    // minVector.push_back(pair<string,string>("Minuit", "Combined"));
+    // minVector.push_back(pair<string,string>("Minuit", "Seek"));
     // minVector.push_back(pair<string,string>("Minuit", "Scan"));
     
     minVector.push_back(pair<string,string>("Minuit2", "Migrad"));
     minVector.push_back(pair<string,string>("Minuit2", "Simplex"));
-    minVector.push_back(pair<string,string>("Minuit2", "Combined"));
+    // minVector.push_back(pair<string,string>("Minuit2", "Combined"));
     minVector.push_back(pair<string,string>("Minuit2", "Seek"));
     // minVector.push_back(pair<string,string>("Minuit2", "Scan"));
     // minVector.push_back(pair<string,string>("Minuit2", "Fumili"));
@@ -101,41 +112,53 @@ int minimizer()
         
         // The minimizer needs an IMultiGenFunction, which is easily provided
         // by a Functor, which is a generic wrapper class
-        Functor fun = Functor(&funcN, Ndim);
+        Functor fun = Functor(&rosenbrockN, Ndim);
         
         // Give the function to the minimizer
         min->SetFunction(fun);
         
         // Give the function variables
-        for (int i=0; i<Ndim; ++i) {
-            min->SetVariable(i, Form("x%d", i), 0, 0.1);
+        if (minVector[i].first=="Genetic") {
+            // Limited domain (genetic algorithm only)
+            for (int i=0; i<Ndim; ++i) {
+                min->SetLimitedVariable(i, Form("x%d", i), 0, 0.05, -0.5, +0.5);
+            }
+        }
+        else {
+            for (int i=0; i<Ndim; ++i) {
+                min->SetVariable(i, Form("x%d", i), 0, 0.05);
+            }
         }
         
         // Verbosity
-        min->SetPrintLevel(1);
+        min->SetPrintLevel(-1);
         
         // Algorithm strategy (higher=slower & more accurate)
         // min->SetStrategy(1);
         
         // Algorithms parameters
         min->SetMaxFunctionCalls(100000);
-        min->SetMaxIterations(10000);
+        min->SetMaxIterations(2000);
         min->SetTolerance(0.001);
         
         // Minimize!
-        min->Minimize();
+        clock_t time = clock();
+        bool success = min->Minimize();
+        time = clock() - time;
+        cout << "Success: " << success << endl;
+        cout << "Time: " << 1000*(double)time/CLOCKS_PER_SEC << " ms " << endl;
         
         // Get out the values
         const double  minValue = min->MinValue();
         const double* minPoint = min->X();
         const double* minErrors= min->Errors();
         
-        cout << "\nValue: " << minValue << endl;
-        for (int i=0; i<Ndim; ++i) {
-            cout << "x" << i+1 << ": " << minPoint[i];
-            if (minErrors!=nullptr) cout << " ± " << minErrors[i];
-            cout << endl;
-        }
+        cout << "Value: " << minValue << endl;
+        //~ for (int i=0; i<Ndim; ++i) {
+            //~ cout << "x" << i+1 << ": " << minPoint[i];
+            //~ if (minErrors!=nullptr) cout << " ± " << minErrors[i];
+            //~ cout << endl;
+        //~ }
         cout << endl;
     }
     
