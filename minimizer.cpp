@@ -71,7 +71,7 @@ class MCMinimizer
 protected:
     TRandom3 rng;
     
-    int Ndim = 0;
+    uint Ndim = 0;
     double (*function)(const double*); // = &rosenbrockN;
     
     vector<double> params;
@@ -84,12 +84,12 @@ protected:
     int printLevel;
     
 public:
-    MCMinimizer()
+    MCMinimizer(uint seed)
     {
-        this->rng = TRandom3(12345);
+        this->rng = TRandom3(seed);
     }
     
-    inline void SetMCFunction(double (*function)(const double*), int Ndim)
+    inline void SetMCFunction(double (*function)(const double*), uint Ndim)
     {
         this->function = function;
         this->Ndim = Ndim;
@@ -103,6 +103,12 @@ public:
         this->names.push_back(name);
     }
     
+    //~ inline bool SetVariable(uint ivar, const string& name, double val, double step)
+    //~ {   // Needed for interface
+        //~ SetMCVariable(name, val, val-10*step, val+10*step);
+        //~ return true;
+    //~ }
+    
     inline void SetMaxFunctionCalls(int calls)
     {
         this->max_function_calls = calls;
@@ -115,7 +121,7 @@ public:
         
         for (int i=0; i<this->max_function_calls; ++i) {
             double pars_array[Ndim];
-            for (int par=0; par < Ndim; ++par) {     // get random params vector
+            for (uint par=0; par < Ndim; ++par) {     // get random params vector
                 pars_array[par] = rng.Uniform(params_min[par], params_max[par]);
             }
             double nmin = (*function)(pars_array);
@@ -126,7 +132,7 @@ public:
         }
         if (printLevel) {
             cout << "FVAL         = " << this->minValue << endl;
-            for (int i=0; i<Ndim; ++i) {
+            for (uint i=0; i<Ndim; ++i) {
                 cout << names[i] << "\t  = " << params[i] << endl;
             }
         }
@@ -138,21 +144,25 @@ public:
         this->printLevel = printLevel;
     }
     
-    inline double MinValue()
+    inline double MinValue() const
     {
         return this->minValue;
     }
     
-    inline double* X()
+    inline const double* X() const
     {
         return &(this->params[0]);
     }
+    
+    inline uint NDim() const
+    {
+        return this->Ndim;
+    }
 };
 
-int minimizer()
+void init(vector<pair<string,string>>& minVector)
 {
     // List of valid minimizers
-    vector<pair<string,string>> minVector;
     //                                      name      algorithm
     // minVector.push_back(pair<string,string>("Minuit", "Migrad"));
     // minVector.push_back(pair<string,string>("Minuit", "Simplex"));
@@ -183,6 +193,12 @@ int minimizer()
     // minVector.push_back(pair<string,string>("Linear", "");
     
     // minVector.push_back(pair<string,string>("Genetic", ""));
+}
+
+int minimizer()
+{
+    vector<pair<string,string>> minVector;
+    init(minVector);
 
     for (unsigned int i=0; i < minVector.size(); ++i) {
     
@@ -229,7 +245,8 @@ int minimizer()
         bool success = min->Minimize();
         time = clock() - time;
         cout << "Success: " << success << endl;
-        cout << "Time: " << 1000*(double)time/CLOCKS_PER_SEC << " ms " << endl;
+        double time_ms = 1000*(double)time/CLOCKS_PER_SEC;
+        cout << "Time: " << time_ms << " ms " << endl;
         
         // Get out the values
         const double  minValue = min->MinValue();
@@ -247,7 +264,7 @@ int minimizer()
     
     // Now my minimizer
     {
-        MCMinimizer* min = new MCMinimizer();
+        MCMinimizer* min = new MCMinimizer(12345);
         cout << "Using algorithm: MCMinimizer" << endl;
         
         // Give the function to the minimizer
@@ -269,7 +286,8 @@ int minimizer()
         bool success = min->Minimize();
         time = clock() - time;
         cout << "Success: " << success << endl;
-        cout << "Time: " << 1000*(double)time/CLOCKS_PER_SEC << " ms " << endl;
+        double time_ms = 1000*(double)time/CLOCKS_PER_SEC;
+        cout << "Time: " << time_ms << " ms " << endl;
         
         // Get out the values
         const double  minValue = min->MinValue();
