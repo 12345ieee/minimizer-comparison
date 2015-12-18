@@ -7,7 +7,7 @@
 //~ #include "TH2.h"
 //~ #include "TH3.h"
 //~ #include "TCanvas.h"
-//~ #include "TRandom3.h"
+#include "TRandom3.h"
 //~ #include "TVector2.h"
 //~ #include "TVector3.h"
 //~ #include "TLorentzVector.h"
@@ -28,14 +28,14 @@
  * GSLMultiFit          *** needs different function type ***
  * GSLSimAn
  * Linear               *** needs linear function ***
- * Genetic
+ * Genetic              *** sloooow and inaccurate ***
  * 
  * 
  * https://root.cern.ch/fitting
  * https://root.cern.ch/numerical-minimization
  */
 
-const int Ndim = 100;
+const int Ndim = 4;
 
 using namespace ROOT::Math;
 using namespace std;
@@ -65,6 +65,65 @@ double rosenbrockN(const double* xx)
     }
     return accumulator;
 }
+
+class MCminimizer : ROOT::Math::Minimizer
+{
+protected:
+    TRandom3 rng;
+    
+    int Ndim = 0;
+    double (*function)(const double*); // = &rosenbrockN;
+    
+    vector<double> params;
+    vector<double> params_min;
+    vector<double> params_max;
+    vector<string> names;
+    
+    int max_function_calls = 0;
+    
+public:
+    MCminimizer()
+    {
+        this->rng = TRandom3(12345);
+    }
+    
+    void SetFunction(double (*function)(const double*), int Ndim)
+    {
+        this->function = function;
+        this->Ndim = Ndim;
+    }
+    
+    void SetMCVariable(string name, double val, double min, double max)
+    {
+        this->params.push_back(val);
+        this->params_min.push_back(min);
+        this->params_max.push_back(max);
+        this->names.push_back(name);
+    }
+    
+    void SetMaxFunctionCalls(int calls)
+    {
+        this->max_function_calls = calls;
+    }
+    
+    bool Minimize()
+    {
+        double minimum = this->function(&params[0]); // evaluate in given initial point
+        
+        for (int i=0; i<this->max_function_calls; ++i) {
+            double pars_array[Ndim];
+            for (int par=0; par < Ndim; ++par) {     // get random params vector
+                pars_array[par] = rng.Uniform(params_min[par], params_max[par]);
+            }
+            double nmin = (*function)(pars_array);
+            if (nmin < minimum) {
+                minimum = nmin;
+                params = vector<double>(pars_array, pars_array + Ndim);
+            }
+        }
+        return true;
+    }
+};
 
 int minimizer()
 {
@@ -99,7 +158,7 @@ int minimizer()
 
     // minVector.push_back(pair<string,string>("Linear", "");
     
-    minVector.push_back(pair<string,string>("Genetic", ""));
+    // minVector.push_back(pair<string,string>("Genetic", ""));
 
     for (unsigned int i=0; i < minVector.size(); ++i) {
     
@@ -131,14 +190,14 @@ int minimizer()
         }
         
         // Verbosity
-        min->SetPrintLevel(-1);
+        min->SetPrintLevel(1);
         
         // Algorithm strategy (higher=slower & more accurate)
         // min->SetStrategy(1);
         
         // Algorithms parameters
         min->SetMaxFunctionCalls(100000);
-        min->SetMaxIterations(2000);
+        min->SetMaxIterations(10000);
         min->SetTolerance(0.001);
         
         // Minimize!
@@ -150,8 +209,8 @@ int minimizer()
         
         // Get out the values
         const double  minValue = min->MinValue();
-        const double* minPoint = min->X();
-        const double* minErrors= min->Errors();
+        // const double* minPoint = min->X();
+        // const double* minErrors= min->Errors();
         
         cout << "Value: " << minValue << endl;
         //~ for (int i=0; i<Ndim; ++i) {
