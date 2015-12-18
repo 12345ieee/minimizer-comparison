@@ -187,11 +187,11 @@ void init(vector<pair<string,string>>& minVector)
     minVector.push_back(pair<string,string>("GSLMultiMin", "ConjugatePR"));
     minVector.push_back(pair<string,string>("GSLMultiMin", "BFGS"));
     minVector.push_back(pair<string,string>("GSLMultiMin", "BFGS2"));
-    minVector.push_back(pair<string,string>("GSLMultiMin", "SteepestDescent"));
+    // minVector.push_back(pair<string,string>("GSLMultiMin", "SteepestDescent"));
     
     // minVector.push_back(pair<string,string>("GSLMultiFit", ""));
     
-    minVector.push_back(pair<string,string>("GSLSimAn", ""));
+    // minVector.push_back(pair<string,string>("GSLSimAn", ""));
 
     // minVector.push_back(pair<string,string>("Linear", "");
     
@@ -216,7 +216,7 @@ double D_parabolaN (const double* array, int N)
     return sqrt(acc);
 }
 
-const int DMAX = 100;
+const int DMAX = 1000;
 
 int minimizer()
 {
@@ -256,11 +256,13 @@ int minimizer()
         // min->SetStrategy(1);
         
         // Algorithms parameters
-        min->SetMaxFunctionCalls(100000);
-        min->SetMaxIterations(10000);
-        min->SetTolerance(0.001);
+        min->SetMaxFunctionCalls(10000000);
+        min->SetMaxIterations(1000000);
+        min->SetTolerance(0.01);
         
-        for (Ndim=1; Ndim<=DMAX; ++Ndim) {
+        bool success = true;
+        
+        for (Ndim=2; Ndim<=DMAX && success; ++Ndim) {
             // The minimizer needs an IMultiGenFunction, which is easily provided
             // by a Functor, which is a generic wrapper class
             Functor fun = Functor(&rosenbrockN, Ndim);
@@ -277,16 +279,18 @@ int minimizer()
             }
             else {
                 for (int i=0; i<Ndim; ++i) {
-                    min->SetVariable(i, Form("x%d", i), 0, 0.05);
+                    min->SetVariable(i, Form("x%d", i), -1, 0.05);
                 }
             }
             
             // Minimize!
             clock_t time = clock();
-            bool success = min->Minimize();
+            success = min->Minimize();
             time = clock() - time;
+            cout << "Ndim: " << Ndim << endl;
             cout << "Success: " << success << endl;
             double time_ms = 1000*(double)time/CLOCKS_PER_SEC;
+            success &= (time_ms < 500);
             cout << "Time: " << time_ms << " ms " << endl;
             
             // Get out the values
@@ -327,26 +331,30 @@ int minimizer()
         cout << "Using algorithm: MCMinimizer" << endl;
         
         // Verbosity
-        min->SetPrintLevel(1);
+        min->SetPrintLevel(0);
         
         // Algorithms parameters
         min->SetMaxFunctionCalls(100000);
         
-        for (Ndim=1; Ndim<=DMAX; ++Ndim) {
+        bool success = true;
+        
+        for (Ndim=2; Ndim<=DMAX && success; ++Ndim) {
             // Give the function to the minimizer
             min->SetMCFunction(rosenbrockN, Ndim);
             
             // Give the function variables
             for (int i=0; i<Ndim; ++i) {
-                min->SetMCVariable(i, Form("x%d", i), 0, 0.85, 1.15);
+                min->SetMCVariable(i, Form("x%d", i), 0, 0.9, 1.1);
             }
             
             // Minimize!
             clock_t time = clock();
-            bool success = min->Minimize();
+            success = min->Minimize();
             time = clock() - time;
+            cout << "Ndim: " << Ndim << endl;
             cout << "Success: " << success << endl;
             double time_ms = 1000*(double)time/CLOCKS_PER_SEC;
+            success &= (time_ms < 500);
             cout << "Time: " << time_ms << " ms " << endl;
             
             // Get out the values
@@ -369,7 +377,7 @@ int minimizer()
         }
     }
     
-    TFile* fout = new TFile("rosenbrockN.root", "RECREATE");
+    TFile* fout = new TFile("infRosenbrockN.root", "RECREATE");
     
     for (unsigned int i=0; i < minVector.size()+1; ++i) {
         TCanvas* ct = new TCanvas(ntime[i].c_str(), ntime[i].c_str(), 800, 600);
