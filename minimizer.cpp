@@ -35,7 +35,7 @@
  * https://root.cern.ch/numerical-minimization
  */
 
-const int Ndim = 4;
+const int Ndim = 5;
 
 using namespace ROOT::Math;
 using namespace std;
@@ -66,7 +66,7 @@ double rosenbrockN(const double* xx)
     return accumulator;
 }
 
-class MCminimizer : ROOT::Math::Minimizer
+class MCMinimizer
 {
 protected:
     TRandom3 rng;
@@ -78,22 +78,24 @@ protected:
     vector<double> params_min;
     vector<double> params_max;
     vector<string> names;
+    double minValue;
     
     int max_function_calls = 0;
+    int printLevel;
     
 public:
-    MCminimizer()
+    MCMinimizer()
     {
         this->rng = TRandom3(12345);
     }
     
-    void SetFunction(double (*function)(const double*), int Ndim)
+    inline void SetMCFunction(double (*function)(const double*), int Ndim)
     {
         this->function = function;
         this->Ndim = Ndim;
     }
     
-    void SetMCVariable(string name, double val, double min, double max)
+    inline void SetMCVariable(string name, double val, double min, double max)
     {
         this->params.push_back(val);
         this->params_min.push_back(min);
@@ -101,14 +103,15 @@ public:
         this->names.push_back(name);
     }
     
-    void SetMaxFunctionCalls(int calls)
+    inline void SetMaxFunctionCalls(int calls)
     {
         this->max_function_calls = calls;
     }
     
     bool Minimize()
     {
-        double minimum = this->function(&params[0]); // evaluate in given initial point
+        if (printLevel) cout << "Minimize using MCMinimizer" << endl;
+        this->minValue = this->function(&params[0]); // evaluate in given initial point
         
         for (int i=0; i<this->max_function_calls; ++i) {
             double pars_array[Ndim];
@@ -116,12 +119,33 @@ public:
                 pars_array[par] = rng.Uniform(params_min[par], params_max[par]);
             }
             double nmin = (*function)(pars_array);
-            if (nmin < minimum) {
-                minimum = nmin;
+            if (nmin < this->minValue) {
+                this->minValue = nmin;
                 params = vector<double>(pars_array, pars_array + Ndim);
             }
         }
+        if (printLevel) {
+            cout << "FVAL         = " << this->minValue << endl;
+            for (int i=0; i<Ndim; ++i) {
+                cout << names[i] << "\t  = " << params[i] << endl;
+            }
+        }
         return true;
+    }
+    
+    inline void SetPrintLevel(int printLevel)
+    {
+        this->printLevel = printLevel;
+    }
+    
+    inline double MinValue()
+    {
+        return this->minValue;
+    }
+    
+    inline double* X()
+    {
+        return &(this->params[0]);
     }
 };
 
@@ -199,6 +223,46 @@ int minimizer()
         min->SetMaxFunctionCalls(100000);
         min->SetMaxIterations(10000);
         min->SetTolerance(0.001);
+        
+        // Minimize!
+        clock_t time = clock();
+        bool success = min->Minimize();
+        time = clock() - time;
+        cout << "Success: " << success << endl;
+        cout << "Time: " << 1000*(double)time/CLOCKS_PER_SEC << " ms " << endl;
+        
+        // Get out the values
+        const double  minValue = min->MinValue();
+        // const double* minPoint = min->X();
+        // const double* minErrors= min->Errors();
+        
+        cout << "Value: " << minValue << endl;
+        //~ for (int i=0; i<Ndim; ++i) {
+            //~ cout << "x" << i+1 << ": " << minPoint[i];
+            //~ if (minErrors!=nullptr) cout << " ± " << minErrors[i];
+            //~ cout << endl;
+        //~ }
+        cout << endl;
+    }
+    
+    // Now my minimizer
+    {
+        MCMinimizer* min = new MCMinimizer();
+        cout << "Using algorithm: MCMinimizer" << endl;
+        
+        // Give the function to the minimizer
+        min->SetMCFunction(rosenbrockN, Ndim);
+        
+        // Give the function variables
+        for (int i=0; i<Ndim; ++i) {
+            min->SetMCVariable(Form("x%d", i), 0, 0.5, 1.5);
+        }
+        
+        // Verbosity
+        min->SetPrintLevel(1);
+        
+        // Algorithms parameters
+        min->SetMaxFunctionCalls(100000);
         
         // Minimize!
         clock_t time = clock();
