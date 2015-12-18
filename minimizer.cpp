@@ -119,6 +119,8 @@ public:
         if (printLevel) cout << "Minimize using MCMinimizer" << endl;
         this->minValue = this->function(&params[0]); // evaluate in given initial point
         
+        bool success = false;
+        
         for (int i=0; i<this->max_function_calls; ++i) {
             double pars_array[Ndim];
             for (uint par=0; par < Ndim; ++par) {    // get random params vector
@@ -126,6 +128,7 @@ public:
             }
             double nmin = (*function)(pars_array);
             if (nmin < this->minValue) {
+                success = true;
                 this->minValue = nmin;
                 params = vector<double>(pars_array, pars_array + Ndim);
             }
@@ -136,7 +139,7 @@ public:
                 cout << names[i] << "\t  = " << params[i] << endl;
             }
         }
-        return true;
+        return success;
     }
     
     inline void SetPrintLevel(int printLevel)
@@ -171,7 +174,7 @@ void init(vector<pair<string,string>>& minVector)
     // minVector.push_back(pair<string,string>("Minuit", "Scan"));
     
     minVector.push_back(pair<string,string>("Minuit2", "Migrad"));
-    minVector.push_back(pair<string,string>("Minuit2", "Simplex"));
+    // minVector.push_back(pair<string,string>("Minuit2", "Simplex"));
     // minVector.push_back(pair<string,string>("Minuit2", "Combined"));
     // minVector.push_back(pair<string,string>("Minuit2", "Seek"));
     // minVector.push_back(pair<string,string>("Minuit2", "Scan"));
@@ -193,6 +196,15 @@ void init(vector<pair<string,string>>& minVector)
     // minVector.push_back(pair<string,string>("Linear", "");
     
     // minVector.push_back(pair<string,string>("Genetic", ""));
+}
+
+double D_rosenbrockN (const double* array, int N)
+{
+    double acc=0;
+    for (int i=0; i<N; ++i) {
+        acc += (array[i]-1)*(array[i]-1);
+    }
+    return sqrt(acc);
 }
 
 double D_parabolaN (const double* array, int N)
@@ -251,7 +263,7 @@ int minimizer()
         for (Ndim=1; Ndim<=DMAX; ++Ndim) {
             // The minimizer needs an IMultiGenFunction, which is easily provided
             // by a Functor, which is a generic wrapper class
-            Functor fun = Functor(&parabolaN, Ndim);
+            Functor fun = Functor(&rosenbrockN, Ndim);
             
             // Give the function to the minimizer
             min->SetFunction(fun);
@@ -290,9 +302,9 @@ int minimizer()
             //~ }
             //~ cout << endl;
             
+            gtime-> SetPoint(gtime-> GetN(), Ndim, time_ms);
             if (success) {
-                gtime-> SetPoint(gtime-> GetN(), Ndim, time_ms);
-                gpoint->SetPoint(gpoint->GetN(), Ndim, D_parabolaN(minPoint, Ndim));
+                gpoint->SetPoint(gpoint->GetN(), Ndim, D_rosenbrockN(minPoint, Ndim));
             }
         }
     }
@@ -322,11 +334,11 @@ int minimizer()
         
         for (Ndim=1; Ndim<=DMAX; ++Ndim) {
             // Give the function to the minimizer
-            min->SetMCFunction(parabolaN, Ndim);
+            min->SetMCFunction(rosenbrockN, Ndim);
             
             // Give the function variables
             for (int i=0; i<Ndim; ++i) {
-                min->SetMCVariable(i, Form("x%d", i), 0, i-1, i+1);
+                min->SetMCVariable(i, Form("x%d", i), 0, 0.85, 1.15);
             }
             
             // Minimize!
@@ -351,11 +363,13 @@ int minimizer()
             //~ cout << endl;
             
             gtime-> SetPoint(gtime-> GetN(), Ndim, time_ms);
-            gpoint->SetPoint(gpoint->GetN(), Ndim, D_parabolaN(minPoint, Ndim));
+            if (success) {
+                gpoint->SetPoint(gpoint->GetN(), Ndim, D_rosenbrockN(minPoint, Ndim));
+            }
         }
     }
     
-    TFile* fout = new TFile("paraboleN.root", "RECREATE");
+    TFile* fout = new TFile("rosenbrockN.root", "RECREATE");
     
     for (unsigned int i=0; i < minVector.size()+1; ++i) {
         TCanvas* ct = new TCanvas(ntime[i].c_str(), ntime[i].c_str(), 800, 600);
