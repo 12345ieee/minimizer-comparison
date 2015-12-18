@@ -6,11 +6,12 @@
 #include "TH1.h"
 //~ #include "TH2.h"
 //~ #include "TH3.h"
-//~ #include "TCanvas.h"
+#include "TCanvas.h"
 #include "TRandom3.h"
 //~ #include "TVector2.h"
 //~ #include "TVector3.h"
-//~ #include "TLorentzVector.h"
+#include "TFile.h"
+#include "TGraph.h"
 #include "TString.h"
 
 #include "Math/Minimizer.h"
@@ -35,10 +36,10 @@
  * https://root.cern.ch/numerical-minimization
  */
 
-const int Ndim = 8;
-
 using namespace ROOT::Math;
 using namespace std;
+
+int Ndim;
 
 double parabola1(const double* xx)
 {
@@ -51,8 +52,7 @@ double parabolaN(const double* xx)
 {
     double accumulator=0;
     for (int i=0; i< Ndim; ++i) {
-        double c = i+1;
-        accumulator += (xx[i]-1/c)*(xx[i]-1/c);
+        accumulator += (xx[i]-i)*(xx[i]-i);
     }
     return accumulator;
 }
@@ -95,12 +95,12 @@ public:
         this->Ndim = Ndim;
     }
     
-    inline void SetMCVariable(string name, double val, double min, double max)
+    inline void SetMCVariable(uint ival, const string& name, double val, double min, double max)
     {
-        this->params.push_back(val);
-        this->params_min.push_back(min);
-        this->params_max.push_back(max);
-        this->names.push_back(name);
+        this->params    .insert(next(this->params    .begin(), ival), val);
+        this->params_min.insert(next(this->params_min.begin(), ival), min);
+        this->params_max.insert(next(this->params_max.begin(), ival), max);
+        this->names     .insert(next(this->names     .begin(), ival),name);
     }
     
     //~ inline bool SetVariable(uint ivar, const string& name, double val, double step)
@@ -121,7 +121,7 @@ public:
         
         for (int i=0; i<this->max_function_calls; ++i) {
             double pars_array[Ndim];
-            for (uint par=0; par < Ndim; ++par) {     // get random params vector
+            for (uint par=0; par < Ndim; ++par) {    // get random params vector
                 pars_array[par] = rng.Uniform(params_min[par], params_max[par]);
             }
             double nmin = (*function)(pars_array);
@@ -173,7 +173,7 @@ void init(vector<pair<string,string>>& minVector)
     minVector.push_back(pair<string,string>("Minuit2", "Migrad"));
     minVector.push_back(pair<string,string>("Minuit2", "Simplex"));
     // minVector.push_back(pair<string,string>("Minuit2", "Combined"));
-    minVector.push_back(pair<string,string>("Minuit2", "Seek"));
+    // minVector.push_back(pair<string,string>("Minuit2", "Seek"));
     // minVector.push_back(pair<string,string>("Minuit2", "Scan"));
     // minVector.push_back(pair<string,string>("Minuit2", "Fumili"));
     minVector.push_back(pair<string,string>("Minuit2", "Fumili2"));
@@ -195,39 +195,47 @@ void init(vector<pair<string,string>>& minVector)
     // minVector.push_back(pair<string,string>("Genetic", ""));
 }
 
+double D_parabolaN (const double* array, int N)
+{
+    double acc=0;
+    for (int i=0; i<N; ++i) {
+        acc += (array[i]-i)*(array[i]-i);
+    }
+    return sqrt(acc);
+}
+
+const int DMAX = 100;
+
 int minimizer()
 {
     vector<pair<string,string>> minVector;
     init(minVector);
 
+    TGraph* gtime_array[minVector.size()+1];
+    TGraph* gpoint_array[minVector.size()+1];
+    string  ntime[minVector.size()+1];
+    string  npoint[minVector.size()+1];
+
     for (unsigned int i=0; i < minVector.size(); ++i) {
-    
+        
+        TGraph* &gtime = gtime_array[i];
+        gtime  = new TGraph(DMAX);
+        ntime[i] = Form("Time_%s,%s", minVector[i].first.c_str(), minVector[i].second.c_str());
+        gtime->SetName(ntime[i].c_str());
+        gtime->SetTitle(Form("Time - %s, %s; Ndim; ms", minVector[i].first.c_str(), minVector[i].second.c_str()));
+        
+        TGraph* &gpoint = gpoint_array[i];
+        gpoint = new TGraph(DMAX);
+        npoint[i] = Form("DPoint_%s,%s", minVector[i].first.c_str(), minVector[i].second.c_str());
+        gpoint->SetName(npoint[i].c_str());
+        gpoint->SetTitle(Form("DPoint - %s, %s; Ndim", minVector[i].first.c_str(), minVector[i].second.c_str()));
+        
         Minimizer* min = Factory::CreateMinimizer(minVector[i].first, minVector[i].second);
         if (min==nullptr) {
             cout << "Invalid algorithm: " << minVector[i].first << " - " << minVector[i].second << endl;
             continue;
         }
         else cout << "Using algorithm: " << minVector[i].first << " - " << minVector[i].second << endl;
-        
-        // The minimizer needs an IMultiGenFunction, which is easily provided
-        // by a Functor, which is a generic wrapper class
-        Functor fun = Functor(&rosenbrockN, Ndim);
-        
-        // Give the function to the minimizer
-        min->SetFunction(fun);
-        
-        // Give the function variables
-        if (minVector[i].first=="Genetic") {
-            // Limited domain (genetic algorithm only)
-            for (int i=0; i<Ndim; ++i) {
-                min->SetLimitedVariable(i, Form("x%d", i), 0, 0.05, -0.5, +0.5);
-            }
-        }
-        else {
-            for (int i=0; i<Ndim; ++i) {
-                min->SetVariable(i, Form("x%d", i), 0, 0.05);
-            }
-        }
         
         // Verbosity
         min->SetPrintLevel(1);
@@ -240,40 +248,71 @@ int minimizer()
         min->SetMaxIterations(10000);
         min->SetTolerance(0.001);
         
-        // Minimize!
-        clock_t time = clock();
-        bool success = min->Minimize();
-        time = clock() - time;
-        cout << "Success: " << success << endl;
-        double time_ms = 1000*(double)time/CLOCKS_PER_SEC;
-        cout << "Time: " << time_ms << " ms " << endl;
-        
-        // Get out the values
-        const double  minValue = min->MinValue();
-        // const double* minPoint = min->X();
-        // const double* minErrors= min->Errors();
-        
-        cout << "Value: " << minValue << endl;
-        //~ for (int i=0; i<Ndim; ++i) {
-            //~ cout << "x" << i+1 << ": " << minPoint[i];
-            //~ if (minErrors!=nullptr) cout << " ± " << minErrors[i];
+        for (Ndim=1; Ndim<=DMAX; ++Ndim) {
+            // The minimizer needs an IMultiGenFunction, which is easily provided
+            // by a Functor, which is a generic wrapper class
+            Functor fun = Functor(&parabolaN, Ndim);
+            
+            // Give the function to the minimizer
+            min->SetFunction(fun);
+            
+            // Give the function variables
+            if (minVector[i].first=="Genetic") {
+                // Limited domain (genetic algorithm only)
+                for (int i=0; i<Ndim; ++i) {
+                    min->SetLimitedVariable(i, Form("x%d", i), 0, 0.05, i-0.5, i+0.5);
+                }
+            }
+            else {
+                for (int i=0; i<Ndim; ++i) {
+                    min->SetVariable(i, Form("x%d", i), 0, 0.05);
+                }
+            }
+            
+            // Minimize!
+            clock_t time = clock();
+            bool success = min->Minimize();
+            time = clock() - time;
+            cout << "Success: " << success << endl;
+            double time_ms = 1000*(double)time/CLOCKS_PER_SEC;
+            cout << "Time: " << time_ms << " ms " << endl;
+            
+            // Get out the values
+            // const double  minValue = min->MinValue();
+            const double* minPoint = min->X();
+            // const double* minErrors= min->Errors();
+            
+            //~ cout << "Value: " << minValue << endl;
+            //~ for (int i=0; i<Ndim; ++i) {
+                //~ cout << "x" << i+1 << ": " << minPoint[i];
+                //~ if (minErrors!=nullptr) cout << " ± " << minErrors[i];
+                //~ cout << endl;
+            //~ }
             //~ cout << endl;
-        //~ }
-        cout << endl;
+            
+            if (success) {
+                gtime-> SetPoint(gtime-> GetN(), Ndim, time_ms);
+                gpoint->SetPoint(gpoint->GetN(), Ndim, D_parabolaN(minPoint, Ndim));
+            }
+        }
     }
     
     // Now my minimizer
     {
+        TGraph* &gtime = gtime_array[minVector.size()];
+        gtime  = new TGraph(DMAX);
+        ntime[minVector.size()] = "Time_MCMinimizer";
+        gtime->SetName("Time_MCMinimizer");
+        gtime->SetTitle("Time - MCMinimizer; Ndim; ms");
+        
+        TGraph* &gpoint = gpoint_array[minVector.size()];
+        gpoint = new TGraph(DMAX);
+        npoint[minVector.size()] = "DPoint_MCMinimizer";
+        gpoint->SetName("DPoint_MCMinimizer");
+        gpoint->SetTitle("DPoint - MCMinimizer; Ndim");
+        
         MCMinimizer* min = new MCMinimizer(12345);
         cout << "Using algorithm: MCMinimizer" << endl;
-        
-        // Give the function to the minimizer
-        min->SetMCFunction(rosenbrockN, Ndim);
-        
-        // Give the function variables
-        for (int i=0; i<Ndim; ++i) {
-            min->SetMCVariable(Form("x%d", i), 0, 0.9, 1.1);
-        }
         
         // Verbosity
         min->SetPrintLevel(1);
@@ -281,27 +320,62 @@ int minimizer()
         // Algorithms parameters
         min->SetMaxFunctionCalls(100000);
         
-        // Minimize!
-        clock_t time = clock();
-        bool success = min->Minimize();
-        time = clock() - time;
-        cout << "Success: " << success << endl;
-        double time_ms = 1000*(double)time/CLOCKS_PER_SEC;
-        cout << "Time: " << time_ms << " ms " << endl;
-        
-        // Get out the values
-        const double  minValue = min->MinValue();
-        // const double* minPoint = min->X();
-        // const double* minErrors= min->Errors();
-        
-        cout << "Value: " << minValue << endl;
-        //~ for (int i=0; i<Ndim; ++i) {
-            //~ cout << "x" << i+1 << ": " << minPoint[i];
-            //~ if (minErrors!=nullptr) cout << " ± " << minErrors[i];
+        for (Ndim=1; Ndim<=DMAX; ++Ndim) {
+            // Give the function to the minimizer
+            min->SetMCFunction(parabolaN, Ndim);
+            
+            // Give the function variables
+            for (int i=0; i<Ndim; ++i) {
+                min->SetMCVariable(i, Form("x%d", i), 0, i-1, i+1);
+            }
+            
+            // Minimize!
+            clock_t time = clock();
+            bool success = min->Minimize();
+            time = clock() - time;
+            cout << "Success: " << success << endl;
+            double time_ms = 1000*(double)time/CLOCKS_PER_SEC;
+            cout << "Time: " << time_ms << " ms " << endl;
+            
+            // Get out the values
+            // const double  minValue = min->MinValue();
+            const double* minPoint = min->X();
+            // const double* minErrors= min->Errors();
+            
+            // cout << "Value: " << minValue << endl;
+            //~ for (int i=0; i<Ndim; ++i) {
+                //~ cout << "x" << i+1 << ": " << minPoint[i];
+                //~ if (minErrors!=nullptr) cout << " ± " << minErrors[i];
+                //~ cout << endl;
+            //~ }
             //~ cout << endl;
-        //~ }
-        cout << endl;
+            
+            gtime-> SetPoint(gtime-> GetN(), Ndim, time_ms);
+            gpoint->SetPoint(gpoint->GetN(), Ndim, D_parabolaN(minPoint, Ndim));
+        }
     }
+    
+    TFile* fout = new TFile("paraboleN.root", "RECREATE");
+    
+    for (unsigned int i=0; i < minVector.size()+1; ++i) {
+        TCanvas* ct = new TCanvas(ntime[i].c_str(), ntime[i].c_str(), 800, 600);
+        ct->cd();
+        gtime_array[i]->SetMarkerStyle(20);
+        gtime_array[i]->Draw("AP");
+        fout->cd();
+        gtime_array[i]->Write();
+        ct->SaveAs(".png");
+        
+        TCanvas* cv = new TCanvas(npoint[i].c_str(), ntime[i].c_str(), 800, 600);
+        cv->cd();
+        gpoint_array[i]->SetMarkerStyle(20);
+        gpoint_array[i]->Draw("AP");
+        fout->cd();
+        gpoint_array[i]->Write();
+        cv->SaveAs(".png");
+    }
+    
+    fout->Close();
     
     return 0;
 }
